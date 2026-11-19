@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scale Lab</title>
+<style>
+  :root { --bg:#0f1218; --card:#181d27; --line:#2a3140; --text:#e8ecf3; --dim:#94a0b4; --accent:#ffb020; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { margin:0 0 4px; font-size:24px; }
+  p.sub { margin:0 0 20px; color:var(--dim); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .card h2 { margin:0 0 6px; font-size:16px; }
+  .card p { margin:0 0 12px; color:var(--dim); font-size:14px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  label { color:var(--dim); font-size:13px; }
+  input { width:80px; padding:7px 8px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:6px; font:inherit; }
+  button { padding:8px 14px; background:var(--accent); color:#1a1300; border:0; border-radius:6px; font:inherit; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .bars { margin-top:14px; display:grid; gap:6px; }
+  .bar { display:grid; grid-template-columns:76px 1fr 52px; gap:8px; align-items:center; font-size:13px; }
+  .bar code { color:var(--accent); }
+  .track { background:var(--bg); border-radius:4px; height:14px; overflow:hidden; }
+  .fill { background:var(--accent); height:100%; }
+  .stat { margin-top:10px; color:var(--dim); font-size:13px; }
+  .stat b { color:var(--text); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Scale Lab</h1>
+  <p class="sub">Each running copy of the server has its own ID. Send requests and see which copies answer.</p>
+
+  <div class="card">
+    <h2>1. Load test</h2>
+    <p>Sends many slow requests at once. When one instance can't take them all, the platform starts more and the load balancer spreads the requests.</p>
+    <div class="row">
+      <label>Requests <input id="total" type="number" value="200" min="1" max="5000"></label>
+      <label>At once <input id="conc" type="number" value="40" min="1" max="200"></label>
+      <label>Work ms <input id="ms" type="number" value="300" min="0" max="5000"></label>
+      <button id="run">Run</button>
+    </div>
+    <div class="stat" id="loadStat">Not run yet.</div>
+    <div class="bars" id="loadBars"></div>
+  </div>
+
+  <div class="card">
+    <h2>2. The in-memory state problem</h2>
+    <p>Adds 1 to a counter stored in server memory, 30 times. With one instance the last value is 30. With several, each instance keeps its own count, so the numbers disagree.</p>
+    <div class="row"><button id="count">Count 30 times</button></div>
+    <div class="stat" id="countStat">Not run yet.</div>
+    <div class="bars" id="countBars"></div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+
+function renderBars(el, map, suffix) {
+  const max = Math.max(1, ...Object.values(map));
+  el.innerHTML = Object.entries(map).sort((a, b) => b[1] - a[1]).map(([id, n]) =>
+    `<div class="bar"><code>${id}</code><div class="track"><div class="fill" style="width:${n / max * 100}%"></div></div><span>${n}${suffix || ''}</span></div>`
+  ).join('');
+}
+
+$('run').onclick = async () => {
+  const total = +$('total').value, conc = +$('conc').value, ms = +$('ms').value;
+  const perInstance = {}; let done = 0, failed = 0, sent = 0, timeSum = 0;
+  const t0 = performance.now();
+  $('run').disabled = true;
+
+  async function worker() {
+    while (sent < total) {
+      sent++;
+      const t = performance.now();
+      try {
+        const r = await fetch(`/api/work?ms=${ms}`, { cache: 'no-store' });
+        if (!r.ok) throw new Error(r.status);
+        const j = await r.json();
+        perInstance[j.instance] = (perInstance[j.instance] || 0) + 1;
+        timeSum += performance.now() - t;
+        done++;
+      } catch { failed++; }
+      const secs = (performance.now() - t0) / 1000;
+      $('loadStat').innerHTML =
+        `<b>${done}</b>/${total} done, <b>${failed}</b> failed, ` +
+        `<b>${Object.keys(perInstance).length}</b> instance(s) answered, ` +
+        `avg <b>${done ? Math.round(timeSum / done) : 0} ms</b>, ` +
+        `<b>${(done / secs).toFixed(1)}</b> req/s`;
+      renderBars($('loadBars'), perInstance);
+    }
+  }
+  await Promise.all(Array.from({ length: conc }, worker));
+  $('run').disabled = false;
+};
+
+$('count').onclick = async () => {
+  $('count').disabled = true;
+  const latest = {};
+  await Promise.all(Array.from({ length: 30 }, async () => {
+    try {
+      const j = await (await fetch('/api/counter', { cache: 'no-store' })).json();
+      latest[j.instance] = Math.max(latest[j.instance] || 0, j.counter);
+    } catch {}
+  }));
+  const n = Object.keys(latest).length;
+  $('countStat').innerHTML = n <= 1
+    ? `One instance answered, so its counter is consistent.`
+    : `<b>${n}</b> instances answered, each with its own counter. No single "true" value exists.`;
+  renderBars($('countBars'), latest, '');
+  $('count').disabled = false;
+};
+</script>
+</body>
+</html>

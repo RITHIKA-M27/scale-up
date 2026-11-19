@@ -1,0 +1,12 @@
+{
+  "name": "scale-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tiny backend for learning load balancing and autoscaling",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

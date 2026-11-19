@@ -1,0 +1,58 @@
+# The app: starts with 1 copy (pod). The code comes from a ConfigMap
+# (created by setup.sh), so no image build is needed.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scale-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scale-lab
+  template:
+    metadata:
+      labels:
+        app: scale-lab
+    spec:
+      containers:
+        - name: app
+          image: node:22-alpine
+          command: ["node", "/app/server.js"]
+          ports:
+            - containerPort: 8080
+          # The autoscaler measures CPU use as a percentage of "requests".
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          # Traffic is only sent to a pod once this check passes.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 2
+          volumeMounts:
+            - name: code
+              mountPath: /app
+      volumes:
+        - name: code
+          configMap:
+            name: scale-lab-code
+---
+# The load balancer: one stable address that spreads connections
+# across all healthy pods. Also opens port 30080 on the node.
+apiVersion: v1
+kind: Service
+metadata:
+  name: scale-lab
+spec:
+  type: NodePort
+  selector:
+    app: scale-lab
+  ports:
+    - port: 80
+      targetPort: 8080
+      nodePort: 30080
