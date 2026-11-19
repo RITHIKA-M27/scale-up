@@ -27,8 +27,8 @@ Open a Kubernetes playground at https://killercoda.com/playgrounds
 ### 1. Set up
 
 ```
-git clone https://github.com/RITHIKA-M27/scale-lab
-cd scale-lab
+git clone https://github.com/RITHIKA-M27/scale-up
+cd scale-up
 sh k8s/setup.sh
 URL=http://$(kubectl get svc scale-lab -o jsonpath='{.spec.clusterIP}')
 ```
