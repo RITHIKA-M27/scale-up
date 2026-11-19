@@ -30,13 +30,12 @@ Open a Kubernetes playground at https://killercoda.com/playgrounds
 git clone https://github.com/RITHIKA-M27/scale-up
 cd scale-up
 sh k8s/setup.sh
-URL=http://$(kubectl get svc scale-lab -o jsonpath='{.spec.clusterIP}')
 ```
 
 ### 2. One instance
 
 ```
-for i in $(seq 10); do curl -s $URL/api/whoami; echo; done
+sh k8s/ask.sh
 ```
 
 Every line shows the same `instance`.
@@ -54,7 +53,7 @@ that is the load balancer (the Kubernetes Service) at work.
 ### 4. The in-memory state problem
 
 ```
-for i in $(seq 10); do curl -s $URL/api/counter; echo; done
+sh k8s/ask.sh counter
 ```
 
 The counter jumps around instead of going 1 to 10, because each instance
